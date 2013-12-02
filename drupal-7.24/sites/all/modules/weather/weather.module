@@ -1,0 +1,590 @@
+<?php
+
+/**
+ * @file
+ * Display current weather data from many places in the world.
+ *
+ * Copyright © 2006-2012 Tobias Quathamer <t.quathamer@gmx.net>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+
+/**
+ * Implement hook_permission().
+ */
+function weather_permission() {
+  return array(
+    'administer custom weather block' => array(
+      'title' => t('Administer custom weather block'),
+      'description' => t('Allows users to configure their custom weather block.'),
+    ),
+    'access weather pages' => array(
+      'title' => t('Access weather pages'),
+      'description' => t('Allows users to access the !weather_page which provides a search for all weather stations.',
+        array('!weather_page' => l(t('weather page'), 'weather'))),
+    ),
+  );
+}
+
+/**
+ * Implement hook_menu().
+ */
+function weather_menu() {
+  $items['admin/config/user-interface/weather'] = array(
+    'title' => 'Weather',
+    'description' => 'Configure system-wide weather displays and the default configuration of new displays.',
+    'page callback' => 'weather_admin_main_page',
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/config/user-interface/weather/default'] = array(
+    'title' => 'Edit default display',
+    'description' => 'Configure settings for the default display.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_display_settings_form', 4),
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_ACTION,
+  );
+  $items['admin/config/user-interface/weather/system-wide/add'] = array(
+    'title' => 'Add display',
+    'description' => 'Configure settings for a weather display.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_display_settings_form', 4, 5),
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_ACTION,
+  );
+  $items['admin/config/user-interface/weather/system-wide/%'] = array(
+    'title' => 'Edit display',
+    'description' => 'Configure settings for a weather display.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_display_settings_form', 4, 5),
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/config/user-interface/weather/system-wide/%/delete'] = array(
+    'title' => 'Delete display',
+    'description' => 'Delete a weather display.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_display_delete_confirm', 4, 5),
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/config/user-interface/weather/system-wide/%/add'] = array(
+    'title' => 'Add location',
+    'description' => 'Configure settings for a location.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_location_settings_form', 4, 5, 6),
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/config/user-interface/weather/system-wide/%/%'] = array(
+    'title' => 'Edit location',
+    'description' => 'Configure settings for a location.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_location_settings_form', 4, 5, 6),
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/config/user-interface/weather/system-wide/%/%/delete'] = array(
+    'title' => 'Delete location',
+    'description' => 'Delete a location from a system-wide weather display.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_location_delete_confirm', 6),
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['user/%/weather'] = array(
+    'title' => 'Weather',
+    'description' => 'Configure your custom weather display.',
+    'page callback' => 'weather_user_main_page',
+    'page arguments' => array(1),
+    'file' => 'weather.forms.inc',
+    'access callback' => 'weather_access_userblock',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['user/%/weather/display'] = array(
+    'title' => 'Edit display',
+    'description' => 'Configure settings for your custom weather display.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_display_settings_form', 0, 1),
+    'file' => 'weather.forms.inc',
+    'access callback' => 'weather_access_userblock',
+    'access arguments' => array(1),
+    'type' => MENU_CALLBACK,
+  );
+  $items['user/%/weather/display/delete'] = array(
+    'title' => 'Delete display',
+    'description' => 'Delete your custom weather display.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_display_delete_confirm', 0, 1),
+    'file' => 'weather.forms.inc',
+    'access callback' => 'weather_access_userblock',
+    'access arguments' => array(1),
+    'type' => MENU_CALLBACK,
+  );
+  $items['user/%/weather/add'] = array(
+    'title' => 'Add location',
+    'description' => 'Configure settings for a location.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_location_settings_form', 0, 1, 3),
+    'file' => 'weather.forms.inc',
+    'access callback' => 'weather_access_userblock',
+    'access arguments' => array(1),
+    'type' => MENU_CALLBACK,
+  );
+  $items['user/%/weather/%'] = array(
+    'title' => 'Edit location',
+    'description' => 'Configure settings for a location.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_location_settings_form', 0, 1, 3),
+    'file' => 'weather.forms.inc',
+    'access callback' => 'weather_access_userblock',
+    'access arguments' => array(1),
+    'type' => MENU_CALLBACK,
+  );
+  $items['user/%/weather/%/delete'] = array(
+    'title' => 'Delete location',
+    'description' => 'Delete a location from your custom weather display.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('weather_location_delete_confirm', 3),
+    'file' => 'weather.forms.inc',
+    'access callback' => 'weather_access_userblock',
+    'access arguments' => array(1),
+    'type' => MENU_CALLBACK,
+  );
+  $items['weather'] = array(
+    'title' => 'Weather',
+    'description' => 'Search for locations and display their current weather.',
+    'page callback' => 'weather_search_location',
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('access weather pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['weather/autocomplete'] = array(
+    'page callback' => 'weather_search_autocomplete',
+    'file' => 'weather.forms.inc',
+    'access arguments' => array('access weather pages'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implement hook_help().
+ */
+function weather_help($path, $arg) {
+  $output = '';
+  switch ($path) {
+    case 'admin/config/user-interface/weather':
+      $output .= '<p>';
+      $output .= t('You can add, edit, and delete locations from system-wide weather displays. Moreover, you can specify default values for newly created displays.');
+      $output .= '</p>';
+      break;
+    case 'user/%/weather':
+      $output .= '<p>';
+      $output .= t('You can add, edit, and delete locations from your custom weather display.');
+      $output .= "\n";
+      $output .= t('Please note that the display will not be shown until you configure at least one location.');
+      $output .= '</p>';
+      break;
+  }
+  return $output;
+}
+
+/**
+ * Implement hook_block_info().
+ */
+function weather_block_info() {
+  $blocks['user'] = array(
+    'info' => t('Weather: custom user'),
+  );
+  $blocks['location'] = array(
+    'info' => t('Weather: location of nodes (requires Location module)'),
+  );
+  $blocks['ip'] = array(
+    'info' => t('Weather: IP-based location of user (requires Smart IP module)'),
+  );
+  $current_displays = weather_get_displays_in_use();
+  foreach ($current_displays as $display_number) {
+    $key = 'system_' . $display_number;
+    $blocks[$key] = array(
+      'info' => t('Weather: system-wide display (number !number)', array('!number' => $display_number)),
+    );
+  }
+  return $blocks;
+}
+
+/**
+ * Implement hook_block_view().
+ */
+function weather_block_view($delta = '') {
+  global $user;
+  $block = array();
+  // Handle the 'system_NUMBER' type of blocks
+  if (strpos($delta, '_') === FALSE) {
+    $display_type = $delta;
+  }
+  else {
+    list($display_type, $display_number) = explode('_', $delta);
+  }
+  switch ($display_type) {
+    case 'user':
+      if (weather_access_userblock()) {
+        // Show the user's custom weather block, if there is already
+        // a location configured. Otherwise, do not show the block.
+        $locations = weather_get_locations_in_use('user', $user->uid);
+        if (empty($locations)) {
+          return;
+        }
+        $block['subject'] = t('Current weather');
+        $block['content'] = '';
+        $display = weather_get_display_settings('user', $user->uid);
+        foreach ($locations as $location_row) {
+          $location = weather_get_location_settings($location_row->id);
+          $metar = weather_get_metar($location_row->icao);
+          $block['content'] .= theme('weather_theming',
+            array('display' => $display, 'location' => $location, 'metar' => $metar));
+        }
+      }
+      break;
+    case 'location':
+      if (user_access('access content')) {
+        // Set up the node location weather block.
+        if (arg(0) == 'node' and is_numeric(arg(1))) {
+          $node = node_load(arg(1));
+          // This checks the location module.
+          if (isset($node->locations)) {
+            $block['subject'] = t('Current weather nearby');
+            $block['content'] = '';
+            $display = weather_get_display_settings('default', 1);
+            // Iterate through all available locations and check
+            // for lat/long information. If there is no information,
+            // the location module returns 0.0/0.0 instead of NULL values.
+            foreach ($node->locations as $location) {
+              if (($location['latitude'] != 0) or ($location['longitude'] != 0)) {
+                $station = weather_get_nearest_station($location['latitude'], $location['longitude']);
+                $metar = weather_get_metar($station->icao);
+                $block['content'] .= theme('weather_theming',
+                  array('display' => $display, 'location' => $station, 'metar' => $metar));
+              }
+            }
+          }
+          // Do not show block if no lat/long information has been found.
+          if (empty($block['content'])) {
+            return;
+          }
+        }
+      }
+      break;
+    case 'ip':
+      if (user_access('access content') and module_exists('smart_ip')) {
+        $result = smart_ip_get_location(ip_address());
+        $latitude = $result['latitude'];
+        $longitude = $result['longitude'];
+        if (!empty($latitude) and !empty($longitude)) {
+          $block['subject'] = t('Current weather near you');
+          $display = weather_get_display_settings('default', 1);
+          $station = weather_get_nearest_station($latitude, $longitude);
+          $metar = weather_get_metar($station->icao);
+          $block['content'] = theme('weather_theming',
+            array('display' => $display, 'location' => $station, 'metar' => $metar));
+        }
+      }
+      break;
+    case 'system':
+      if (user_access('access content')) {
+        // Show a system-wide weather display.
+        $block['subject'] = t('Current weather');
+        $block['content'] = '';
+        $display = weather_get_display_settings('system-wide', $display_number);
+        $locations = weather_get_locations_in_use('system-wide', $display_number);
+        foreach ($locations as $location_row) {
+          $location = weather_get_location_settings($location_row->id);
+          $metar = weather_get_metar($location->icao);
+          $block['content'] .= theme('weather_theming',
+            array('display' => $display, 'location' => $location, 'metar' => $metar));
+        }
+        if (empty($block['content'])) {
+          $block['content'] = t('There is no location configured yet.');
+        }
+      }
+  }
+  return $block;
+}
+
+/**
+ * Get all currently used displays.
+ *
+ * @param string $type
+ *   Display type.
+ *
+ * @return array
+ *   Array of sorted displays.
+ */
+function weather_get_displays_in_use($type='system-wide') {
+  return db_query('SELECT number FROM {weather_display} WHERE type=:type ORDER BY number ASC',
+    array(':type' => $type))->fetchCol();
+}
+
+/**
+ * Get all currently used locations for a display.
+ *
+ * @param string $display_type
+ *   Display type.
+ * @param int $display_number
+ *   Display number.
+ *
+ * @return array
+ *   Array of sorted locations.
+ */
+function weather_get_locations_in_use($display_type, $display_number) {
+  return db_query('SELECT * FROM {weather_location}
+    WHERE display_type=:type AND display_number=:number ORDER BY weight ASC, real_name ASC',
+    array(':type' => $display_type, ':number' => $display_number));
+}
+
+/**
+ * Return display settings for a specific display.
+ *
+ * If there are no settings yet, get the default settings instead.
+ *
+ * @param string $display_type
+ *   Display type.
+ * @param int $display_number
+ *   Display number.
+ *
+ * @return
+ *   Display configuration.
+ */
+function weather_get_display_settings($display_type, $display_number=NULL) {
+  $settings = db_query('SELECT * FROM {weather_display} WHERE type=:type AND number=:number',
+    array(':type' => $display_type, ':number' => $display_number))->fetchObject();
+  if (empty($settings)) {
+    // There are no specific settings. Try to get custom default settings.
+    $settings = db_query('SELECT * FROM {weather_display} WHERE type=:type',
+      array(':type' => 'default'))->fetchObject();
+    if (empty($settings)) {
+      // There are no custom default settings. Get module's default settings.
+      $settings = new stdClass();
+      $settings->units = array(
+        'temperature' => 'celsius',
+        'windspeed' => 'kmh',
+        'pressure' => 'hpa',
+        'distance' => 'kilometers',
+      );
+      $settings->settings = array(
+        'data' => array(
+          'temperature' => 'temperature',
+          'wind' => 'wind',
+          'pressure' => 'pressure',
+          'humidity' => 'humidity',
+          'visibility' => 'visibility',
+        ),
+        'show_windchill' => FALSE,
+        'show_abbreviated_directions' => FALSE,
+        'show_directions_degree' => FALSE,
+        'show_compact_block' => FALSE,
+      );
+    }
+    else {
+      // Convert custom default settings.
+      $settings->units = unserialize($settings->units);
+      $settings->settings = unserialize($settings->settings);
+    }
+  }
+  else {
+    // Convert specified settings.
+    $settings->units = unserialize($settings->units);
+    $settings->settings = unserialize($settings->settings);
+  }
+  return $settings;
+}
+
+/**
+ * Return location settings for a specific id.
+ *
+ * If there are no settings yet, get the default settings instead.
+ *
+ * @param int $location_id
+ *   Location id.
+ *
+ * @return
+ *   Location configuration.
+ */
+function weather_get_location_settings($location_id) {
+  $settings = db_query('SELECT * FROM {weather_location} WHERE id=:id',
+    array(':id' => $location_id))->fetchObject();
+  if (empty($settings)) {
+    // There are no settings. Get module's default settings.
+    $settings->icao = 'EDDH';
+    $settings->real_name = 'Hamburg-Fuhlsbüttel';
+    $settings->weight = 0;
+    $settings->country = 'Germany';
+  }
+  else {
+    $settings->country = weather_get_country_from_icao($settings->icao);
+  }
+  return $settings;
+}
+
+/**
+ * Get the country of the ICAO code.
+ *
+ * @param string $wanted_icao
+ *   ICAO code.
+ *
+ * @return string
+ *   The country of the ICAO code or an empty string.
+ */
+function weather_get_country_from_icao($wanted_icao) {
+  return db_query('SELECT country FROM {weather_icao} WHERE icao=:icao',
+    array(':icao' => $wanted_icao))->fetchField();
+}
+
+/**
+ * Get all places for a country.
+ *
+ * @param string $country
+ *   Country for which the placed should be returned.
+ *
+ * @return array
+ *   Array of sorted places.
+ */
+function weather_get_places($country) {
+  $result = db_query('SELECT icao, name FROM {weather_icao} WHERE country=:country ORDER BY name ASC',
+    array(':country' => $country));
+  foreach ($result as $row) {
+    $places[$row->icao] = $row->name;
+  }
+  return $places;
+}
+
+/**
+ * Checks whether the user has access to their own custom weather block.
+ *
+ * @param int $uid
+ *   User id.
+ *
+ * @return boolean
+ *   TRUE or FALSE.
+ */
+function weather_access_userblock($uid=NULL) {
+  global $user;
+  // If $uid is not set, just check for the access permission.
+  if (is_null($uid) || $user->uid == $uid) {
+    return user_access('administer custom weather block');
+  }
+  return FALSE;
+}
+
+/**
+ * Implement hook_theme().
+ */
+function weather_theme() {
+  return array(
+    // Custom theme function for preprocessing variables
+    'weather_theming' => array(
+      'file' => 'weather_theme.inc',
+      'variables' => array('display' => NULL, 'location' => NULL, 'metar' => NULL),
+    ),
+    // Default block layout
+    'weather' => array(
+      'template' => 'weather',
+      'variables' => array('weather' => NULL),
+    ),
+    // Compact block layout
+    'weather_compact' => array(
+      'template' => 'weather_compact',
+      'variables' => array('weather' => NULL),
+    ),
+  );
+}
+
+/**
+ * Return ICAO code of the nearest weather station.
+ *
+ * The distance calculation is based on the spherical law of cosines.
+ * The bearing is converted from radians to degress and normalized to
+ * be between 0 and 360 degress. The returned value will range from
+ * -180° to 180°.
+ * All angles must be passed in radians for the trigonometry functions.
+ *
+ * R = Earth's radius (using a mean radius of 6371 km)
+ * distance = R * acos(sin(lat1) * sin(lat2) + cos(lat1) * cos(lat2)
+ *                     * cos(long2 - long1))
+ * bearing = atan2(sin(long2 - long1) * cos(lat2),
+ *                 cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2)
+ *                 * cos(long2- long1))
+ *
+ * @param float $latitude
+ *   Latitude to be searched.
+ * @param float $longitude
+ *   Longitude to be searched.
+ *
+ * @return object
+ *   Object with ICAO code, name, distance, and bearing.
+ */
+function weather_get_nearest_station($latitude, $longitude) {
+  $sql = "SELECT icao, name AS real_name,
+    ROUND(6371 *
+      ACOS(
+        SIN(RADIANS(:lat)) * SIN(RADIANS(latitude)) +
+        COS(RADIANS(:lat)) * COS(RADIANS(latitude)) * COS(RADIANS(longitude - :long))
+      ),
+    1) AS distance,
+    MOD(
+      ROUND(
+        DEGREES(
+          ATAN2(
+            SIN(RADIANS(longitude - :long)) * COS(RADIANS(latitude)),
+            COS(RADIANS(:lat)) * SIN(RADIANS(latitude)) - SIN(RADIANS(:lat)) * COS(RADIANS(latitude)) * COS(RADIANS(longitude - :long))
+          )
+        )
+      ) + 360, 360
+    ) AS bearing
+    FROM {weather_icao} ORDER BY distance";
+  return db_query($sql, array(':lat' => $latitude, ':long' => $longitude))->fetchObject();
+}
+
+/**
+ * Fetches the latest METAR data from the database or internet.
+ *
+ * @param string $icao
+ *   ICAO code.
+ *
+ * @return object
+ *   METAR data object or FALSE.
+ */
+function weather_get_metar($icao) {
+  // See if there's a report in the database.
+  $icao = drupal_strtoupper($icao);
+  $sql = "SELECT * FROM {weather_metar} WHERE icao=:icao";
+  $metar = db_query($sql, array(':icao' => $icao))->fetchObject();
+  // If there's no data at all or the data is outdated, try to download it.
+  if ($metar == FALSE or ($metar->next_update_on <= REQUEST_TIME)) {
+    module_load_include('inc', 'weather', 'weather_parser');
+    weather_refresh_data($icao, $metar);
+  }
+  return $metar;
+}

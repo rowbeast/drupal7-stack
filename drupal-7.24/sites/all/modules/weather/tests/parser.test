@@ -1,0 +1,221 @@
+<?php
+
+/**
+ * @file
+ * Tests parsing of raw METAR data.
+ *
+ * Copyright © 2006-2012 Tobias Quathamer <t.quathamer@gmx.net>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+
+class WeatherParserTestCase extends DrupalWebTestCase {
+  /**
+   * General information.
+   */
+  function getInfo() {
+    return array(
+      'name' => 'Parser',
+      'description' => 'Tests parsing of raw METAR data.',
+      'group' => 'Weather',
+    );
+  }
+
+  /**
+   * Set up testing environment.
+   */
+  function setUp() {
+    parent::setUp('weather');
+    module_load_include('inc', 'weather', 'weather_parser');
+  }
+
+  /**
+   * Test the parser with normal data.
+   */
+  function testNormalMETAR() {
+    $testdata = array(
+      "EDDH 071250Z 27005KT 9999 -SHRA BKN025 07/04 Q1021 NOSIG" =>
+      array(
+        'icao' => 'EDDH',
+        'sky_condition' => 'broken',
+        'phenomena' => 'light rain showers',
+        'temperature' => 7,
+        'dewpoint' => 4,
+        'wind_direction' => '270',
+        'wind_speed' => 9.3,
+        'wind_gusts' => NULL,
+        'pressure' => 1021,
+        'visibility' => 9999,
+        'image' => 'day-broken-light-rain',
+        'raw' => 'EDDH 071250Z 27005KT 9999 -SHRA BKN025 07/04 Q1021 NOSIG',
+      ),
+      "EDDH 291120Z 15004KT 1200 R23/1600N R15/1500N SN VV/// 01/M00 Q0995 NOSIG" =>
+      array(
+        'icao' => 'EDDH',
+        'sky_condition' => 'overcast',
+        'phenomena' => 'snow',
+        'temperature' => 1,
+        'dewpoint' => 0,
+        'wind_direction' => '150',
+        'wind_speed' => 7.4,
+        'wind_gusts' => NULL,
+        'pressure' => 995,
+        'visibility' => 1200,
+        'image' => 'day-overcast-moderate-snow',
+        'raw' => 'EDDH 291120Z 15004KT 1200 R23/1600N R15/1500N SN VV/// 01/M00 Q0995 NOSIG',
+      ),
+      "LICF 040255Z 02014G31KT 6000 RA BKN008 BKN080 OVC090 12/11 Q0994 RMK OVC QUK / QUL / VIS MAR 6 KM MON INVIS NC VIS MIN 6000" =>
+      array(
+        'icao' => 'LICF',
+        'sky_condition' => 'overcast',
+        'phenomena' => 'rain',
+        'temperature' => 12,
+        'dewpoint' => 11,
+        'wind_direction' => '20',
+        'wind_speed' => 25.9,
+        'wind_gusts' => 57.4,
+        'pressure' => 994,
+        'visibility' => 6000,
+        'image' => 'night-overcast-moderate-rain',
+        'raw' => 'LICF 040255Z 02014G31KT 6000 RA BKN008 BKN080 OVC090 12/11 Q0994 RMK OVC QUK / QUL / VIS MAR 6 KM MON INVIS NC VIS MIN 6000',
+      ),
+      "CYYZ 071400Z 31026G33KT 15SM FEW030 FEW120 FEW210 M09/M15 A2984 RMK CU2AC1CI1 CI TR SLP114" =>
+      array(
+        'icao' => 'CYYZ',
+        'sky_condition' => 'few',
+        'phenomena' => NULL,
+        'temperature' => -9,
+        'dewpoint' => -15,
+        'wind_direction' => '310',
+        'wind_speed' => 48.2,
+        'wind_gusts' => 61.1,
+        'pressure' => 1010,
+        'visibility' => 24140,
+        'image' => 'day-few',
+        'raw' => 'CYYZ 071400Z 31026G33KT 15SM FEW030 FEW120 FEW210 M09/M15 A2984 RMK CU2AC1CI1 CI TR SLP114',
+      ),
+      "FACT 071400Z 20016KT CAVOK 24/17 Q1013 NOSIG" =>
+      array(
+        'icao' => 'FACT',
+        'sky_condition' => 'clear',
+        'phenomena' => NULL,
+        'temperature' => 24,
+        'dewpoint' => 17,
+        'wind_direction' => '200',
+        'wind_speed' => 29.6,
+        'wind_gusts' => NULL,
+        'pressure' => 1013,
+        'visibility' => 10000,
+        'image' => 'day-clear',
+        'raw' => 'FACT 071400Z 20016KT CAVOK 24/17 Q1013 NOSIG',
+      ),
+      "ULLI 232330Z 14006MPS 9999 OVC006 DZ M03/M04 Q0997 10520545 NOSIG RMK OBST OBSC" =>
+      array(
+        'icao' => 'ULLI',
+        'sky_condition' => 'overcast',
+        'phenomena' => 'drizzle',
+        'temperature' => -3,
+        'dewpoint' => -4,
+        'wind_direction' => '140',
+        'wind_speed' => 21.6,
+        'wind_gusts' => NULL,
+        'pressure' => 997,
+        'visibility' => 9999,
+        'image' => 'night-overcast-moderate-rain',
+        'raw' => 'ULLI 232330Z 14006MPS 9999 OVC006 DZ M03/M04 Q0997 10520545 NOSIG RMK OBST OBSC',
+      ),
+      "EGPL 222320Z AUTO 21012KT 7000NDV FEW006/// SCT010/// BKN014/// 09/08 Q1026" =>
+      array(
+        'icao' => 'EGPL',
+        'sky_condition' => 'broken',
+        'phenomena' => NULL,
+        'temperature' => 9,
+        'dewpoint' => 8,
+        'wind_direction' => '210',
+        'wind_speed' => 22.2,
+        'wind_gusts' => NULL,
+        'pressure' => 1026,
+        'visibility' => 7000,
+        'image' => 'night-broken',
+        'raw' => 'EGPL 222320Z AUTO 21012KT 7000NDV FEW006/// SCT010/// BKN014/// 09/08 Q1026',
+      ),
+      "EGUB 220250Z AUTO 18003KT 5000NDV BR OVC013/// 10/09 Q1035" =>
+      array(
+        'icao' => 'EGUB',
+        'sky_condition' => 'overcast',
+        'phenomena' => 'mist',
+        'temperature' => 10,
+        'dewpoint' => 9,
+        'wind_direction' => '180',
+        'wind_speed' => 5.6,
+        'wind_gusts' => NULL,
+        'pressure' => 1035,
+        'visibility' => 5000,
+        'image' => 'night-overcast-fog',
+        'raw' => 'EGUB 220250Z AUTO 18003KT 5000NDV BR OVC013/// 10/09 Q1035',
+      ),
+      "CYLT 290100Z 29008KT 12SM SCT220 M36/M41 A3023 RMK CI2 IC LAST OBS/NEXT 011300 UTC SLP245" =>
+      array(
+        'icao' => 'CYLT',
+        'sky_condition' => 'scattered',
+        'phenomena' => NULL,
+        'temperature' => -36,
+        'dewpoint' => -41,
+        'wind_direction' => '290',
+        'wind_speed' => 14.8,
+        'wind_gusts' => NULL,
+        'pressure' => 1024,
+        'visibility' => 19312,
+        'image' => 'night-scattered',
+        'raw' => 'CYLT 290100Z 29008KT 12SM SCT220 M36/M41 A3023 RMK CI2 IC LAST OBS/NEXT 011300 UTC SLP245',
+      ),
+      "EPGD 300230Z 27013KT 9999 -SHSN BKN013 M02/M04 Q0984 R11/490236" =>
+      array(
+        'icao' => 'EPGD',
+        'sky_condition' => 'broken',
+        'phenomena' => 'light snow showers',
+        'temperature' => -2,
+        'dewpoint' => -4,
+        'wind_direction' => '270',
+        'wind_speed' => 24.1,
+        'wind_gusts' => NULL,
+        'pressure' => 984,
+        'visibility' => 9999,
+        'image' => 'night-broken-light-snow',
+        'raw' => 'EPGD 300230Z 27013KT 9999 -SHSN BKN013 M02/M04 Q0984 R11/490236',
+      ),
+    );
+    foreach ($testdata as $metar_raw => $expected) {
+      // First, parse the raw data into the METAR data object.
+      // Then store it in the database and retrieve it again.
+      $actual_metar = weather_parse_metar($metar_raw);
+      $actual_metar->next_update_on = '1234567890';
+      drupal_write_record('weather_metar', $actual_metar);
+      $actual_metar = db_query('SELECT * FROM {weather_metar} WHERE icao=:icao',
+        array(':icao' => $expected['icao']))->fetchObject();
+      $properties = array_keys(get_object_vars($actual_metar));
+      // Check that all expected properties match the parsed data.
+      foreach ($expected as $key => $value) {
+        $this->assert(in_array($key, $properties),
+          "Check that property '$key' exists in parsed data.");
+        $this->assertEqual($actual_metar->$key, $value);
+      }
+      // Remove test data from database.
+      db_delete('weather_metar')
+        ->condition('icao', $expected['icao'])
+        ->execute();
+    }
+  }
+}

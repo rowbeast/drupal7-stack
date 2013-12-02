@@ -1,0 +1,168 @@
+<?php
+
+/**
+ * @file
+ * Tests permission and access settings for different users.
+ *
+ * Copyright © 2006-2012 Tobias Quathamer <t.quathamer@gmx.net>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+
+class WeatherPermissionTestCase extends DrupalWebTestCase {
+  function getInfo() {
+    return array(
+      'name' => 'Permission',
+      'description' => 'Tests permission and access settings for different users.',
+      'group' => 'Weather',
+    );
+  }
+
+
+
+  /**
+   * Set up testing environment
+   */
+  function setUp() {
+    parent::setUp('weather', 'block');
+  }
+
+
+
+  /**
+   * Permissions of weather block
+   *
+   * This test requires that at least one system wide block is enabled.
+   */
+  function testPermissions() {
+    // This user is allowed to view the system block
+    $normal_user = $this->drupalCreateUser(array(
+      'access content'
+    ));
+    // This user is allowed to administer a custom weather block
+    $weather_user_1 = $this->drupalCreateUser(array(
+      'access content', 'administer custom weather block'
+    ));
+    // This user is also allowed to administer a custom weather block,
+    // like weather_user_1. However, he's not allowed to edit the
+    // custom block of weather_user_1. This catches bug #244087
+    // (Only one permission for everyone)
+    $weather_user_2 = $this->drupalCreateUser(array(
+      'access content', 'administer custom weather block'
+    ));
+    // This user is allowed to access the weather pages
+    $weather_pages_user = $this->drupalCreateUser(array(
+      'access content', 'access weather pages'
+    ));
+    // This user may setup a system-wide weather block.
+    $admin_user = $this->drupalCreateUser(array(
+      'access content', 'administer custom weather block',
+      'administer site configuration', 'administer blocks'
+    ));
+
+    // Test with admin user
+    $this->drupalLogin($admin_user);
+    // Get different pages
+    $this->drupalGet('node');
+    $this->drupalGet('user/' . $admin_user->uid . '/weather');
+    $this->assertText(t('Weather'));
+    $this->drupalGet('admin/config/user-interface/weather');
+    $this->assertText(t('Add display'));
+
+    // Enable a system-wide weather block
+    $this->drupalPost('admin/config/user-interface/weather/system-wide/add', array(), t('Save'));
+    $this->drupalGet('admin/config/user-interface/weather');
+    $this->assertText('Add location to this display');
+    $edit = array('blocks[weather_system_1][region]' => 'sidebar_second');
+    $this->drupalPost('admin/structure/block', $edit, t('Save blocks'));
+    $this->drupalGet('node');
+    $this->assertText(t('Current weather'));
+    // Logout current user
+    $this->drupalLogout();
+
+    // Test with normal user
+    $this->drupalLogin($normal_user);
+    // Get different pages
+    $this->drupalGet('node');
+    $this->assertText(t('Current weather'));
+    $this->drupalGet('user/' . $normal_user->uid);
+    $this->assertNoText(t('Weather'));
+    $this->drupalGet('user/' . $normal_user->uid . '/weather');
+    $this->assertText(t('Access denied'));
+    $this->drupalGet('admin/config/user-interface/weather');
+    $this->assertText(t('Access denied'));
+    $this->drupalGet('weather');
+    $this->assertText(t('Access denied'));
+    $this->drupalGet('weather/EDDH');
+    $this->assertText(t('Access denied'));
+    // Logout current user
+    $this->drupalLogout();
+
+    // Test with weather user
+    $this->drupalLogin($weather_user_1);
+    // Get different pages
+    $this->drupalGet('node');
+    $this->assertText(t('Current weather'));
+    $this->drupalGet('user/' . $weather_user_1->uid);
+    $this->assertText(t('Weather'));
+    $this->drupalGet('user/' . $weather_user_1->uid . '/weather');
+    $this->assertText(t('Weather'));
+    $this->drupalGet('admin/config/user-interface/weather');
+    $this->assertText(t('Access denied'));
+    $this->drupalGet('weather');
+    $this->assertText(t('Access denied'));
+    $this->drupalGet('weather/EDDH');
+    $this->assertText(t('Access denied'));
+    // Logout current user
+    $this->drupalLogout();
+
+    // Test with weather user 2
+    $this->drupalLogin($weather_user_2);
+    // Get different pages
+    $this->drupalGet('node');
+    $this->assertText(t('Current weather'));
+    $this->drupalGet('user/' . $weather_user_2->uid);
+    $this->assertText(t('Weather'));
+    $this->drupalGet('user/' . $weather_user_2->uid . '/weather');
+    $this->assertText(t('Weather'));
+    $this->drupalGet('admin/config/user-interface/weather');
+    $this->assertText(t('Access denied'));
+    // Do not allow editing another user's settings, see #244087
+    $this->drupalGet('user/' . $weather_user_1->uid . '/weather');
+    $this->assertText(t('Access denied'));
+    // Logout current user
+    $this->drupalLogout();
+
+    // Test with weather pages
+    $this->drupalLogin($weather_pages_user);
+    // Get different pages
+    $this->drupalGet('node');
+    $this->assertText(t('Current weather'));
+    $this->drupalGet('user/' . $weather_pages_user->uid . '/weather');
+    $this->assertText(t('Access denied'));
+    $this->drupalGet('admin/config/user-interface/weather');
+    $this->assertText(t('Access denied'));
+    $this->drupalGet('weather');
+    $this->assertText(t('Search for a location'));
+    $this->drupalGet('weather/EDDV');
+    $this->assertText(t('Hannover'));
+    $this->drupalGet('weather/hannover');
+    $this->assertText(t('Hannover'));
+    $this->drupalGet('weather/toddy');
+    $this->assertText(t('Your search did not return any results.'));
+    // Logout current user
+    $this->drupalLogout();
+  }
+}

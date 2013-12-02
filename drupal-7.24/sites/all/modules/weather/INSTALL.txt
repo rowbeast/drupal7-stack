@@ -1,0 +1,25 @@
+Installation
+------------
+
+* Copy the module into your sites/all/modules directory.
+* Go to admin/modules and enable the weather module.
+
+Configuration
+-------------
+
+* If you want to have a system-wide weather block (i.e. the same
+  location for every user), go to Administer->Configuration->Weather
+  and add a display. Afterwards, you can add as much locations
+  as you like to that display. Go to Administer->Structure->Blocks
+  and enable the "Weather: system-wide display (number 1)" block.
+* If you want to allow users to configure their own custom weather
+  blocks, go to Administer->Structure->Blocks and enable the
+  "Weather: custom user" block. You might want to change the
+  "Visibility settings" in the configuration page of the block to
+  "Customizable, hidden by default." in the "User" tab.
+  Afterwards, go to Administer->People and switch to the "Permission"
+  tab. Set the "Administer custom weather block" permission for the
+  appropriate role.
+* If you want visitors of your site to have the possibility of searching
+  for weather reports, you can set the "Access weather pages" permission
+  for the appropriate roles.
